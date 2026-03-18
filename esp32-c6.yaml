@@ -1,0 +1,771 @@
+# =============================================================================
+# ESPHome konfigurace pro WS2811 LED pásky s pokročilými animacemi
+# =============================================================================
+# Zařízení: ESP32-C6 DevKit
+# LED pásky: 2x WS2811 (bílý)
+#   - Pásek 1: GPIO21, 20 LED
+#   - Pásek 2: GPIO18, 10 LED (10 segmentů po 10cm)
+# Funkce: Plynulé animace rozsvěcení/zhasínání s nastavitelnou rychlostí
+# =============================================================================
+
+substitutions:
+  devicename: esp32c6_ws2811_white
+  # Pásek 1 - hlavní
+  led_pin_1: GPIO21
+  num_leds_1: "20"
+  # Pásek 2 - druhý
+  led_pin_2: GPIO18
+  num_leds_2: "10"
+  # Společné nastavení
+  rgb_order: "GRB"
+  fade_px: "20"
+
+esphome:
+  name: ${devicename}
+
+esp32:
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "Krenkovi_wifi"
+  password: "11771177"
+  ap:
+    ssid: "${devicename}-fallback"
+    password: "12345678"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+number:
+  - platform: template
+    id: fx_on_duration_s
+    name: "FX Turn ON Duration"
+    unit_of_measurement: "s"
+    min_value: 0.2
+    max_value: 30
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 4.0
+
+  - platform: template
+    id: fx_off_duration_s
+    name: "FX Turn OFF Duration"
+    unit_of_measurement: "s"
+    min_value: 0.2
+    max_value: 30
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 4.0
+
+  - platform: template
+    id: fade_duration_s
+    name: "Fade Duration"
+    unit_of_measurement: "s"
+    min_value: 0.2
+    max_value: 30
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 2.0
+
+  - platform: template
+    id: fade_up_from_brightness
+    name: "Fade Up: From Brightness"
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+
+  - platform: template
+    id: fade_up_to_brightness
+    name: "Fade Up: To Brightness"
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 100
+
+  - platform: template
+    id: fade_down_from_brightness
+    name: "Fade Down: From Brightness"
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 100
+
+  - platform: template
+    id: fade_down_to_brightness
+    name: "Fade Down: To Brightness"
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: slider
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+
+globals:
+  - id: fx_start_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  - id: fx_duration_ms
+    type: int
+    restore_value: no
+    initial_value: '1000'
+
+  - id: fade_start_brightness
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  - id: fade_end_brightness
+    type: float
+    restore_value: no
+    initial_value: '1.0'
+
+light:
+  # PÁSEK 1 - GPIO21, 20 LED
+  - platform: esp32_rmt_led_strip
+    id: strip_1
+    name: "WS2811 White Strip 1"
+    pin: ${led_pin_1}
+    num_leds: ${num_leds_1}
+    chipset: WS2811
+    rgb_order: ${rgb_order}
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+    effects:
+      - addressable_lambda:
+          name: "On Forward Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              float x = (front - (float)i) / fade;
+              float b = smoothstep(x);
+              int v = (int) (255.0f * b + 0.5f);
+              it[i] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "On Reverse Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              int ri = (N - 1) - i;
+              float x = (front - (float)i) / fade;
+              float b = smoothstep(x);
+              int v = (int) (255.0f * b + 0.5f);
+              it[ri] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Off Forward Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              float x = (front - (float)i) / fade;
+              float cut = smoothstep(x);
+              float b = 1.0f - cut;
+              int v = (int) (255.0f * b + 0.5f);
+              it[i] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Off Reverse Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              int ri = (N - 1) - i;
+              float x = (front - (float)i) / fade;
+              float b = 1.0f - smoothstep(x);
+              int v = (int) (255.0f * b + 0.5f);
+              it[ri] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Fade Up Brightness"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            float smooth_p = smoothstep(p);
+            float brightness = id(fade_start_brightness) + 
+                             (id(fade_end_brightness) - id(fade_start_brightness)) * smooth_p;
+            
+            int v = (int) (255.0f * brightness + 0.5f);
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            
+            for (int i = 0; i < N; i++) {
+              it[i] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Fade Down Brightness"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            float smooth_p = smoothstep(p);
+            float brightness = id(fade_start_brightness) + 
+                             (id(fade_end_brightness) - id(fade_start_brightness)) * smooth_p;
+            
+            int v = (int) (255.0f * brightness + 0.5f);
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            
+            for (int i = 0; i < N; i++) {
+              it[i] = Color(v, v, v);
+            }
+
+  # PÁSEK 2 - GPIO18, 10 LED
+  - platform: esp32_rmt_led_strip
+    id: strip_2
+    name: "WS2811 White Strip 2"
+    pin: ${led_pin_2}
+    num_leds: ${num_leds_2}
+    chipset: WS2811
+    rgb_order: ${rgb_order}
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+    effects:
+      - addressable_lambda:
+          name: "On Forward Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              float x = (front - (float)i) / fade;
+              float b = smoothstep(x);
+              int v = (int) (255.0f * b + 0.5f);
+              it[i] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "On Reverse Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              int ri = (N - 1) - i;
+              float x = (front - (float)i) / fade;
+              float b = smoothstep(x);
+              int v = (int) (255.0f * b + 0.5f);
+              it[ri] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Off Forward Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              float x = (front - (float)i) / fade;
+              float cut = smoothstep(x);
+              float b = 1.0f - cut;
+              int v = (int) (255.0f * b + 0.5f);
+              it[i] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Off Reverse Smooth"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const float fade = (float) ${fade_px};
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            const float front = (-fade) + p * ((N - 1) + fade);
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            for (int i = 0; i < N; i++) {
+              int ri = (N - 1) - i;
+              float x = (front - (float)i) / fade;
+              float b = 1.0f - smoothstep(x);
+              int v = (int) (255.0f * b + 0.5f);
+              it[ri] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Fade Up Brightness"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            float smooth_p = smoothstep(p);
+            float brightness = id(fade_start_brightness) + 
+                             (id(fade_end_brightness) - id(fade_start_brightness)) * smooth_p;
+            
+            int v = (int) (255.0f * brightness + 0.5f);
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            
+            for (int i = 0; i < N; i++) {
+              it[i] = Color(v, v, v);
+            }
+
+      - addressable_lambda:
+          name: "Fade Down Brightness"
+          update_interval: 16ms
+          lambda: |-
+            const int N = it.size();
+            const uint32_t now = millis();
+            
+            float p = 0.0f;
+            if (id(fx_duration_ms) > 0) {
+              p = (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms);
+            }
+            if (p < 0.0f) p = 0.0f;
+            if (p > 1.0f) p = 1.0f;
+            
+            auto smoothstep = [](float x) -> float {
+              if (x <= 0.0f) return 0.0f;
+              if (x >= 1.0f) return 1.0f;
+              return x * x * (3.0f - 2.0f * x);
+            };
+            
+            float smooth_p = smoothstep(p);
+            float brightness = id(fade_start_brightness) + 
+                             (id(fade_end_brightness) - id(fade_start_brightness)) * smooth_p;
+            
+            int v = (int) (255.0f * brightness + 0.5f);
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            
+            for (int i = 0; i < N; i++) {
+              it[i] = Color(v, v, v);
+            }
+
+# Tlačítka pro ovládání obou pásků
+button:
+  # PÁSEK 1
+  - platform: template
+    name: "Strip 1: FX On Forward"
+    on_press:
+      - script.execute: fx_strip1_on_forward
+
+  - platform: template
+    name: "Strip 1: FX On Reverse"
+    on_press:
+      - script.execute: fx_strip1_on_reverse
+
+  - platform: template
+    name: "Strip 1: FX Off Forward"
+    on_press:
+      - script.execute: fx_strip1_off_forward
+
+  - platform: template
+    name: "Strip 1: FX Off Reverse"
+    on_press:
+      - script.execute: fx_strip1_off_reverse
+
+  - platform: template
+    name: "Strip 1: Fade Up"
+    on_press:
+      - script.execute: fx_strip1_fade_up
+
+  - platform: template
+    name: "Strip 1: Fade Down"
+    on_press:
+      - script.execute: fx_strip1_fade_down
+
+  # PÁSEK 2
+  - platform: template
+    name: "Strip 2: FX On Forward"
+    on_press:
+      - script.execute: fx_strip2_on_forward
+
+  - platform: template
+    name: "Strip 2: FX On Reverse"
+    on_press:
+      - script.execute: fx_strip2_on_reverse
+
+  - platform: template
+    name: "Strip 2: FX Off Forward"
+    on_press:
+      - script.execute: fx_strip2_off_forward
+
+  - platform: template
+    name: "Strip 2: FX Off Reverse"
+    on_press:
+      - script.execute: fx_strip2_off_reverse
+
+  - platform: template
+    name: "Strip 2: Fade Up"
+    on_press:
+      - script.execute: fx_strip2_fade_up
+
+  - platform: template
+    name: "Strip 2: Fade Down"
+    on_press:
+      - script.execute: fx_strip2_fade_down
+
+# Skripty pro pásek 1
+script:
+  - id: fx_strip1_on_forward
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_on_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "On Forward Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "None"
+
+  - id: fx_strip1_on_reverse
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_on_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "On Reverse Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "None"
+
+  - id: fx_strip1_off_forward
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_off_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "Off Forward Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_off:
+          id: strip_1
+
+  - id: fx_strip1_off_reverse
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_off_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "Off Reverse Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_off:
+          id: strip_1
+
+  - id: fx_strip1_fade_up
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fade_duration_s).state * 1000.0f);
+          id(fade_start_brightness) = id(fade_up_from_brightness).state / 100.0f;
+          id(fade_end_brightness) = id(fade_up_to_brightness).state / 100.0f;
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "Fade Up Brightness"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_on:
+          id: strip_1
+          brightness: !lambda "return id(fade_up_to_brightness).state / 100.0f;"
+          effect: "None"
+
+  - id: fx_strip1_fade_down
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fade_duration_s).state * 1000.0f);
+          id(fade_start_brightness) = id(fade_down_from_brightness).state / 100.0f;
+          id(fade_end_brightness) = id(fade_down_to_brightness).state / 100.0f;
+      - light.turn_on:
+          id: strip_1
+          brightness: 100%
+          effect: "Fade Down Brightness"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - if:
+          condition:
+            lambda: 'return id(fade_down_to_brightness).state == 0;'
+          then:
+            - light.turn_off:
+                id: strip_1
+          else:
+            - light.turn_on:
+                id: strip_1
+                brightness: !lambda "return id(fade_down_to_brightness).state / 100.0f;"
+                effect: "None"
+
+  # Skripty pro pásek 2
+  - id: fx_strip2_on_forward
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_on_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_2
+          brightness: 100%
+          effect: "On Forward Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_on:
+          id: strip_2
+          brightness: 100%
+          effect: "None"
+
+  - id: fx_strip2_on_reverse
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_on_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_2
+          brightness: 100%
+          effect: "On Reverse Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_on:
+          id: strip_2
+          brightness: 100%
+          effect: "None"
+
+  - id: fx_strip2_off_forward
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_off_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip_2
+          brightness: 100%
+          effect: "Off Forward Smooth"
+      - delay: !lambda "return (uint32_t) id(fx_duration_ms);"
+      - light.turn_off:
+          id: strip_2
+
+  - id: fx_strip2_off_reverse
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
