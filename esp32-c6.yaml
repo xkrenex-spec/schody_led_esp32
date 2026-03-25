@@ -7,30 +7,15 @@ substitutions:
 
 esphome:
   name: ${devicename}
-  on_boot:
-    priority: -100
-    then:
-      - lambda: |-
-          ESP_LOGI("main", "Boot complete, LED strip ready");
-      - delay: 1s
-      - if:
-          condition:
-            switch.is_on: auto_mode
-          then:
-            - script.execute: auto_cycle
 
 esp32:
   board: esp32-c6-devkitc-1
   variant: esp32c6
   framework:
     type: esp-idf
-    sdkconfig_options:
-      CONFIG_FREERTOS_HZ: "1000"
-      CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160: "y"
-      CONFIG_COMPILER_OPTIMIZATION_PERF: "y"
 
 logger:
-  level: INFO  # Changed from DEBUG for better performance
+  level: DEBUG
 
 api:
   reboot_timeout: 15min
@@ -52,23 +37,6 @@ captive_portal:
 mdns:
   disabled: false
 
-# ============================================================================
-# GLOBALS
-# ============================================================================
-globals:
-  - id: fx_start_ms
-    type: uint32_t
-    initial_value: '0'
-  - id: fx_duration_ms
-    type: int
-    initial_value: '1000'
-  - id: fx_current_effect
-    type: std::string
-    initial_value: '"None"'
-
-# ============================================================================
-# NUMBERS (Sliders)
-# ============================================================================
 number:
   - platform: template
     id: fx_on_duration_s
@@ -80,7 +48,6 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 4.0
-    icon: mdi:timer-play
 
   - platform: template
     id: fx_off_duration_s
@@ -92,7 +59,6 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 4.0
-    icon: mdi:timer-stop
 
   - platform: template
     id: fx_min_brightness
@@ -104,7 +70,6 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 0
-    icon: mdi:brightness-4
 
   - platform: template
     id: fx_max_brightness
@@ -116,7 +81,6 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 100
-    icon: mdi:brightness-7
 
   - platform: template
     id: fx_global_fade_duration_s
@@ -128,236 +92,50 @@ number:
     optimistic: true
     restore_value: true
     initial_value: 2.0
-    icon: mdi:timer-sand
 
-  - platform: template
-    id: auto_interval_s
-    name: "Auto Cycle Interval"
-    unit_of_measurement: "s"
-    min_value: 5
-    max_value: 300
-    step: 5
-    optimistic: true
-    restore_value: true
-    initial_value: 30
-    icon: mdi:clock-outline
-
-# ============================================================================
-# SELECTS
-# ============================================================================
-select:
-  - platform: template
-    id: easing_mode
-    name: "Easing Mode"
-    optimistic: true
-    options:
-      - "Linear"
-      - "Smooth (Smoothstep)"
-      - "EaseIn (Quadratic)"
-      - "EaseOut (Quadratic)"
-      - "EaseInOut (Cubic)"
-      - "Bounce"
-    initial_option: "Smooth (Smoothstep)"
-    restore_value: true
-    icon: mdi:chart-bell-curve
-
-  - platform: template
-    id: fx_preset
-    name: "Effect Preset"
-    optimistic: true
-    options:
-      - "Slow Fade"
-      - "Medium"
-      - "Fast Strobe"
-      - "Gentle Wave"
-      - "Custom"
-    initial_option: "Medium"
-    restore_value: true
-    icon: mdi:palette
-    on_value:
-      then:
-        - lambda: |-
-            auto preset = id(fx_preset).state;
-            if (preset == "Slow Fade") {
-              id(fx_on_duration_s).publish_state(8.0);
-              id(fx_off_duration_s).publish_state(8.0);
-              id(fx_global_fade_duration_s).publish_state(5.0);
-            } else if (preset == "Medium") {
-              id(fx_on_duration_s).publish_state(4.0);
-              id(fx_off_duration_s).publish_state(4.0);
-              id(fx_global_fade_duration_s).publish_state(2.0);
-            } else if (preset == "Fast Strobe") {
-              id(fx_on_duration_s).publish_state(0.5);
-              id(fx_off_duration_s).publish_state(0.5);
-              id(fx_global_fade_duration_s).publish_state(0.2);
-            } else if (preset == "Gentle Wave") {
-              id(fx_on_duration_s).publish_state(10.0);
-              id(fx_off_duration_s).publish_state(10.0);
-              id(fx_global_fade_duration_s).publish_state(8.0);
-            }
-
-  - platform: template
-    id: auto_cycle_pattern
-    name: "Auto Cycle Pattern"
-    optimistic: true
-    options:
-      - "Forward Only"
-      - "Reverse Only"
-      - "Forward-Reverse"
-      - "Random"
-    initial_option: "Forward-Reverse"
-    restore_value: true
-    icon: mdi:sync
-
-# ============================================================================
-# SWITCHES
-# ============================================================================
-switch:
-  - platform: template
-    id: auto_mode
-    name: "Auto Mode"
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    icon: mdi:auto-mode
-    on_turn_on:
-      - script.execute: auto_cycle
-    on_turn_off:
-      - script.stop: auto_cycle
-
-# ============================================================================
-# BUTTONS
-# ============================================================================
 button:
   - platform: template
     name: "Run FX On Forward"
-    icon: mdi:arrow-right-bold
     on_press:
       - script.execute: fx_on_forward
 
   - platform: template
     name: "Run FX On Reverse"
-    icon: mdi:arrow-left-bold
     on_press:
       - script.execute: fx_on_reverse
 
   - platform: template
     name: "Run FX Off Forward"
-    icon: mdi:arrow-right-bold-outline
     on_press:
       - script.execute: fx_off_forward
 
   - platform: template
     name: "Run FX Off Reverse"
-    icon: mdi:arrow-left-bold-outline
     on_press:
       - script.execute: fx_off_reverse
 
   - platform: template
     name: "Run FX All ON (Fade)"
-    icon: mdi:lightbulb-on
     on_press:
       - script.execute: fx_all_on
 
   - platform: template
     name: "Run FX All OFF (Fade)"
-    icon: mdi:lightbulb-off
     on_press:
       - script.execute: fx_all_off
 
-  - platform: restart
-    name: "Restart Device"
-    icon: mdi:restart
+globals:
+  - id: fx_start_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: fx_duration_ms
+    type: int
+    initial_value: '1000'
 
-# ============================================================================
-# BINARY SENSORS
-# ============================================================================
-binary_sensor:
-  - platform: template
-    id: bs_on_fwd
-    name: "FX On Forward Running"
-    device_class: running
-    icon: mdi:play-circle
-
-  - platform: template
-    id: bs_on_rev
-    name: "FX On Reverse Running"
-    device_class: running
-    icon: mdi:play-circle
-
-  - platform: template
-    id: bs_off_fwd
-    name: "FX Off Forward Running"
-    device_class: running
-    icon: mdi:stop-circle
-
-  - platform: template
-    id: bs_off_rev
-    name: "FX Off Reverse Running"
-    device_class: running
-    icon: mdi:stop-circle
-
-  - platform: status
-    name: "Status"
-
-# ============================================================================
-# SENSORS
-# ============================================================================
-sensor:
-  - platform: template
-    id: fx_progress
-    name: "FX Progress"
-    unit_of_measurement: "%"
-    accuracy_decimals: 1
-    update_interval: 100ms
-    icon: mdi:progress-clock
-    lambda: |-
-      if (id(fx_duration_ms) > 0) {
-        uint32_t now = millis();
-        int32_t elapsed = now - id(fx_start_ms);
-        if (elapsed < 0) return 0.0f;
-        float p = (float)elapsed / (float)id(fx_duration_ms);
-        if (p < 0.0f) p = 0.0f;
-        if (p > 1.0f) p = 1.0f;
-        return p * 100.0f;
-      }
-      return 0.0f;
-
-  - platform: uptime
-    name: "Uptime"
-    icon: mdi:clock-outline
-
-  - platform: wifi_signal
-    name: "WiFi Signal"
-    update_interval: 60s
-    icon: mdi:wifi
-
-# ============================================================================
-# TEXT SENSORS
-# ============================================================================
-text_sensor:
-  - platform: template
-    name: "Current Effect"
-    icon: mdi:animation
-    update_interval: 500ms
-    lambda: |-
-      return id(fx_current_effect);
-
-  - platform: wifi_info
-    ip_address:
-      name: "IP Address"
-      icon: mdi:ip-network
-
-  - platform: version
-    name: "ESPHome Version"
-    hide_timestamp: true
-
-# ============================================================================
-# LIGHT
-# ============================================================================
 light:
   - platform: esp32_rmt_led_strip
     id: strip
-    name: "WS2811 Strip"
+    name: "WS2811 White Strip"
     pin: ${led_pin}
     num_leds: ${num_leds}
     chipset: WS2811
@@ -365,9 +143,6 @@ light:
     default_transition_length: 0s
     restore_mode: ALWAYS_OFF
     effects:
-      # ======================================================================
-      # ON FORWARD SMOOTH
-      # ======================================================================
       - addressable_lambda:
           name: "On Forward Smooth"
           update_interval: 16ms
@@ -377,42 +152,9 @@ light:
             const uint32_t now = millis();
             float p = (id(fx_duration_ms) > 0) ? (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms) : 1.0f;
             if (p < 0.0f) p = 0.0f; if (p > 1.0f) p = 1.0f;
-            
-            // Apply easing
-            float eased_p = p;
-            auto mode = id(easing_mode).state;
-            if (mode == "Linear") {
-              eased_p = p;
-            } else if (mode == "Smooth (Smoothstep)") {
-              eased_p = p * p * (3.0f - 2.0f * p);
-            } else if (mode == "EaseIn (Quadratic)") {
-              eased_p = p * p;
-            } else if (mode == "EaseOut (Quadratic)") {
-              eased_p = 1.0f - (1.0f - p) * (1.0f - p);
-            } else if (mode == "EaseInOut (Cubic)") {
-              eased_p = p < 0.5f ? 4.0f * p * p * p : 1.0f - pow(-2.0f * p + 2.0f, 3.0f) / 2.0f;
-            } else if (mode == "Bounce") {
-              const float n1 = 7.5625f;
-              const float d1 = 2.75f;
-              float bp = p;
-              if (bp < 1.0f / d1) {
-                eased_p = n1 * bp * bp;
-              } else if (bp < 2.0f / d1) {
-                bp -= 1.5f / d1;
-                eased_p = n1 * bp * bp + 0.75f;
-              } else if (bp < 2.5f / d1) {
-                bp -= 2.25f / d1;
-                eased_p = n1 * bp * bp + 0.9375f;
-              } else {
-                bp -= 2.625f / d1;
-                eased_p = n1 * bp * bp + 0.984375f;
-              }
-            }
-            
             const float min_v = (id(fx_min_brightness).state / 100.0f) * 255.0f;
             const float max_v = (id(fx_max_brightness).state / 100.0f) * 255.0f;
-            const float front = eased_p * (N + fade);
-            
+            const float front = p * (N + fade);
             for (int i = 0; i < N; i++) {
               float x = (front - (float)i) / fade;
               if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
@@ -421,9 +163,6 @@ light:
               it[i] = Color(v, v, v);
             }
 
-      # ======================================================================
-      # ON REVERSE SMOOTH
-      # ======================================================================
       - addressable_lambda:
           name: "On Reverse Smooth"
           update_interval: 16ms
@@ -433,42 +172,9 @@ light:
             const uint32_t now = millis();
             float p = (id(fx_duration_ms) > 0) ? (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms) : 1.0f;
             if (p < 0.0f) p = 0.0f; if (p > 1.0f) p = 1.0f;
-            
-            // Apply easing
-            float eased_p = p;
-            auto mode = id(easing_mode).state;
-            if (mode == "Linear") {
-              eased_p = p;
-            } else if (mode == "Smooth (Smoothstep)") {
-              eased_p = p * p * (3.0f - 2.0f * p);
-            } else if (mode == "EaseIn (Quadratic)") {
-              eased_p = p * p;
-            } else if (mode == "EaseOut (Quadratic)") {
-              eased_p = 1.0f - (1.0f - p) * (1.0f - p);
-            } else if (mode == "EaseInOut (Cubic)") {
-              eased_p = p < 0.5f ? 4.0f * p * p * p : 1.0f - pow(-2.0f * p + 2.0f, 3.0f) / 2.0f;
-            } else if (mode == "Bounce") {
-              const float n1 = 7.5625f;
-              const float d1 = 2.75f;
-              float bp = p;
-              if (bp < 1.0f / d1) {
-                eased_p = n1 * bp * bp;
-              } else if (bp < 2.0f / d1) {
-                bp -= 1.5f / d1;
-                eased_p = n1 * bp * bp + 0.75f;
-              } else if (bp < 2.5f / d1) {
-                bp -= 2.25f / d1;
-                eased_p = n1 * bp * bp + 0.9375f;
-              } else {
-                bp -= 2.625f / d1;
-                eased_p = n1 * bp * bp + 0.984375f;
-              }
-            }
-            
             const float min_v = (id(fx_min_brightness).state / 100.0f) * 255.0f;
             const float max_v = (id(fx_max_brightness).state / 100.0f) * 255.0f;
-            const float front = eased_p * (N + fade);
-            
+            const float front = p * (N + fade);
             for (int i = 0; i < N; i++) {
               int ri = (N - 1) - i;
               float x = (front - (float)i) / fade;
@@ -478,9 +184,6 @@ light:
               it[ri] = Color(v, v, v);
             }
 
-      # ======================================================================
-      # OFF FORWARD SMOOTH
-      # ======================================================================
       - addressable_lambda:
           name: "Off Forward Smooth"
           update_interval: 16ms
@@ -490,53 +193,18 @@ light:
             const uint32_t now = millis();
             float p = (id(fx_duration_ms) > 0) ? (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms) : 1.0f;
             if (p < 0.0f) p = 0.0f; if (p > 1.0f) p = 1.0f;
-            
-            // Apply easing
-            float eased_p = p;
-            auto mode = id(easing_mode).state;
-            if (mode == "Linear") {
-              eased_p = p;
-            } else if (mode == "Smooth (Smoothstep)") {
-              eased_p = p * p * (3.0f - 2.0f * p);
-            } else if (mode == "EaseIn (Quadratic)") {
-              eased_p = p * p;
-            } else if (mode == "EaseOut (Quadratic)") {
-              eased_p = 1.0f - (1.0f - p) * (1.0f - p);
-            } else if (mode == "EaseInOut (Cubic)") {
-              eased_p = p < 0.5f ? 4.0f * p * p * p : 1.0f - pow(-2.0f * p + 2.0f, 3.0f) / 2.0f;
-            } else if (mode == "Bounce") {
-              const float n1 = 7.5625f;
-              const float d1 = 2.75f;
-              float bp = p;
-              if (bp < 1.0f / d1) {
-                eased_p = n1 * bp * bp;
-              } else if (bp < 2.0f / d1) {
-                bp -= 1.5f / d1;
-                eased_p = n1 * bp * bp + 0.75f;
-              } else if (bp < 2.5f / d1) {
-                bp -= 2.25f / d1;
-                eased_p = n1 * bp * bp + 0.9375f;
-              } else {
-                bp -= 2.625f / d1;
-                eased_p = n1 * bp * bp + 0.984375f;
-              }
-            }
-            
             const float min_v = (id(fx_min_brightness).state / 100.0f) * 255.0f;
             const float max_v = (id(fx_max_brightness).state / 100.0f) * 255.0f;
-            const float front = eased_p * (N + fade);
-            
+            const float front = p * (N + fade);
             for (int i = 0; i < N; i++) {
               float x = (front - (float)i) / fade;
               if (x < 0.0f) x = 0.0f; if (x > 1.0f) x = 1.0f;
+              // Invertovaný smoothstep pro plynulý pokles na min_v
               float b = 1.0f - (x * x * (3.0f - 2.0f * x));
               int v = (int)(min_v + (max_v - min_v) * b + 0.5f);
               it[i] = Color(v, v, v);
             }
 
-      # ======================================================================
-      # OFF REVERSE SMOOTH
-      # ======================================================================
       - addressable_lambda:
           name: "Off Reverse Smooth"
           update_interval: 16ms
@@ -546,42 +214,9 @@ light:
             const uint32_t now = millis();
             float p = (id(fx_duration_ms) > 0) ? (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms) : 1.0f;
             if (p < 0.0f) p = 0.0f; if (p > 1.0f) p = 1.0f;
-            
-            // Apply easing
-            float eased_p = p;
-            auto mode = id(easing_mode).state;
-            if (mode == "Linear") {
-              eased_p = p;
-            } else if (mode == "Smooth (Smoothstep)") {
-              eased_p = p * p * (3.0f - 2.0f * p);
-            } else if (mode == "EaseIn (Quadratic)") {
-              eased_p = p * p;
-            } else if (mode == "EaseOut (Quadratic)") {
-              eased_p = 1.0f - (1.0f - p) * (1.0f - p);
-            } else if (mode == "EaseInOut (Cubic)") {
-              eased_p = p < 0.5f ? 4.0f * p * p * p : 1.0f - pow(-2.0f * p + 2.0f, 3.0f) / 2.0f;
-            } else if (mode == "Bounce") {
-              const float n1 = 7.5625f;
-              const float d1 = 2.75f;
-              float bp = p;
-              if (bp < 1.0f / d1) {
-                eased_p = n1 * bp * bp;
-              } else if (bp < 2.0f / d1) {
-                bp -= 1.5f / d1;
-                eased_p = n1 * bp * bp + 0.75f;
-              } else if (bp < 2.5f / d1) {
-                bp -= 2.25f / d1;
-                eased_p = n1 * bp * bp + 0.9375f;
-              } else {
-                bp -= 2.625f / d1;
-                eased_p = n1 * bp * bp + 0.984375f;
-              }
-            }
-            
             const float min_v = (id(fx_min_brightness).state / 100.0f) * 255.0f;
             const float max_v = (id(fx_max_brightness).state / 100.0f) * 255.0f;
-            const float front = eased_p * (N + fade);
-            
+            const float front = p * (N + fade);
             for (int i = 0; i < N; i++) {
               int ri = (N - 1) - i;
               float x = (front - (float)i) / fade;
@@ -591,9 +226,6 @@ light:
               it[ri] = Color(v, v, v);
             }
 
-      # ======================================================================
-      # GLOBAL FADE ON
-      # ======================================================================
       - addressable_lambda:
           name: "Global Fade On"
           update_interval: 16ms
@@ -601,46 +233,11 @@ light:
             const uint32_t now = millis();
             float p = (id(fx_duration_ms) > 0) ? (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms) : 1.0f;
             if (p < 0.0f) p = 0.0f; if (p > 1.0f) p = 1.0f;
-            
-            // Apply easing
-            float eased_p = p;
-            auto mode = id(easing_mode).state;
-            if (mode == "Linear") {
-              eased_p = p;
-            } else if (mode == "Smooth (Smoothstep)") {
-              eased_p = p * p * (3.0f - 2.0f * p);
-            } else if (mode == "EaseIn (Quadratic)") {
-              eased_p = p * p;
-            } else if (mode == "EaseOut (Quadratic)") {
-              eased_p = 1.0f - (1.0f - p) * (1.0f - p);
-            } else if (mode == "EaseInOut (Cubic)") {
-              eased_p = p < 0.5f ? 4.0f * p * p * p : 1.0f - pow(-2.0f * p + 2.0f, 3.0f) / 2.0f;
-            } else if (mode == "Bounce") {
-              const float n1 = 7.5625f;
-              const float d1 = 2.75f;
-              float bp = p;
-              if (bp < 1.0f / d1) {
-                eased_p = n1 * bp * bp;
-              } else if (bp < 2.0f / d1) {
-                bp -= 1.5f / d1;
-                eased_p = n1 * bp * bp + 0.75f;
-              } else if (bp < 2.5f / d1) {
-                bp -= 2.25f / d1;
-                eased_p = n1 * bp * bp + 0.9375f;
-              } else {
-                bp -= 2.625f / d1;
-                eased_p = n1 * bp * bp + 0.984375f;
-              }
-            }
-            
             const float min_v = (id(fx_min_brightness).state / 100.0f) * 255.0f;
             const float max_v = (id(fx_max_brightness).state / 100.0f) * 255.0f;
-            const int v = (int)(min_v + (max_v - min_v) * eased_p + 0.5f);
+            const int v = (int)(min_v + (max_v - min_v) * p + 0.5f);
             for (int i = 0; i < it.size(); i++) it[i] = Color(v, v, v);
 
-      # ======================================================================
-      # GLOBAL FADE OFF
-      # ======================================================================
       - addressable_lambda:
           name: "Global Fade Off"
           update_interval: 16ms
@@ -648,54 +245,173 @@ light:
             const uint32_t now = millis();
             float p = (id(fx_duration_ms) > 0) ? (float)(now - id(fx_start_ms)) / (float) id(fx_duration_ms) : 1.0f;
             if (p < 0.0f) p = 0.0f; if (p > 1.0f) p = 1.0f;
-            
-            // Apply easing
-            float eased_p = p;
-            auto mode = id(easing_mode).state;
-            if (mode == "Linear") {
-              eased_p = p;
-            } else if (mode == "Smooth (Smoothstep)") {
-              eased_p = p * p * (3.0f - 2.0f * p);
-            } else if (mode == "EaseIn (Quadratic)") {
-              eased_p = p * p;
-            } else if (mode == "EaseOut (Quadratic)") {
-              eased_p = 1.0f - (1.0f - p) * (1.0f - p);
-            } else if (mode == "EaseInOut (Cubic)") {
-              eased_p = p < 0.5f ? 4.0f * p * p * p : 1.0f - pow(-2.0f * p + 2.0f, 3.0f) / 2.0f;
-            } else if (mode == "Bounce") {
-              const float n1 = 7.5625f;
-              const float d1 = 2.75f;
-              float bp = p;
-              if (bp < 1.0f / d1) {
-                eased_p = n1 * bp * bp;
-              } else if (bp < 2.0f / d1) {
-                bp -= 1.5f / d1;
-                eased_p = n1 * bp * bp + 0.75f;
-              } else if (bp < 2.5f / d1) {
-                bp -= 2.25f / d1;
-                eased_p = n1 * bp * bp + 0.9375f;
-              } else {
-                bp -= 2.625f / d1;
-                eased_p = n1 * bp * bp + 0.984375f;
-              }
-            }
-            
             const float min_v = (id(fx_min_brightness).state / 100.0f) * 255.0f;
             const float max_v = (id(fx_max_brightness).state / 100.0f) * 255.0f;
-            const int v = (int)(max_v - (max_v - min_v) * eased_p + 0.5f);
+            const int v = (int)(max_v - (max_v - min_v) * p + 0.5f);
             for (int i = 0; i < it.size(); i++) it[i] = Color(v, v, v);
 
-# ============================================================================
-# SCRIPTS
-# ============================================================================
+binary_sensor:
+  - platform: template
+    id: bs_on_fwd
+    name: "FX On Forward Running"
+    device_class: running
+
+  - platform: template
+    id: bs_on_rev
+    name: "FX On Reverse Running"
+    device_class: running
+
+  - platform: template
+    id: bs_off_fwd
+    name: "FX Off Forward Running"
+    device_class: running
+
+  - platform: template
+    id: bs_off_rev
+    name: "FX Off Reverse Running"
+    device_class: running
+
 script:
-  # ==========================================================================
-  # FX ON FORWARD
-  # ==========================================================================
   - id: fx_on_forward
     mode: restart
     then:
       - lambda: |-
           id(fx_start_ms) = millis();
           id(fx_duration_ms) = (int)(id(fx_on_duration_s).state * 1000.0f);
-          id(fx_current_effect) = "On Forward";
+      - light.turn_on:
+          id: strip
+          effect: "On Forward Smooth"
+          brightness: 1.0 
+      - wait_until:
+          lambda: 'return (millis() - id(fx_start_ms)) >= id(fx_duration_ms);'
+      - delay: 50ms
+      - light.turn_on:
+          id: strip
+          effect: "None"
+          brightness: !lambda "return id(fx_max_brightness).state / 100.0f;"
+          red: 1.0
+          green: 1.0
+          blue: 1.0
+
+  - id: fx_on_reverse
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_on_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip
+          effect: "On Reverse Smooth"
+          brightness: 1.0
+          red: 1.0
+          green: 1.0
+          blue: 1.0
+      - wait_until:
+          lambda: 'return (millis() - id(fx_start_ms)) >= id(fx_duration_ms);'
+      - delay: 50ms
+      - light.turn_on:
+          id: strip
+          effect: "None"
+          brightness: !lambda "return id(fx_max_brightness).state / 100.0f;"
+          red: 1.0
+          green: 1.0
+          blue: 1.0
+
+  - id: fx_off_forward
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_off_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip
+          effect: "Off Forward Smooth"
+          brightness: 1.0 
+      - wait_until:
+          lambda: 'return (millis() - id(fx_start_ms)) >= id(fx_duration_ms);'
+      - delay: 50ms
+      - lambda: |-
+          if (id(fx_min_brightness).state > 0) {
+            auto call = id(strip).make_call();
+            call.set_effect("None");
+            call.set_brightness(id(fx_min_brightness).state / 100.0f);
+            call.set_rgb(1.0, 1.0, 1.0);
+            call.perform();
+          } else {
+            id(strip).turn_off().perform();
+          }
+
+  - id: fx_off_reverse
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_off_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip
+          effect: "Off Reverse Smooth"
+          brightness: 1.0 
+      - wait_until:
+          lambda: 'return (millis() - id(fx_start_ms)) >= id(fx_duration_ms);'
+      - delay: 50ms
+      - lambda: |-
+          if (id(fx_min_brightness).state > 0) {
+            auto call = id(strip).make_call();
+            call.set_effect("None");
+            call.set_brightness(id(fx_min_brightness).state / 100.0f);
+            call.set_rgb(1.0, 1.0, 1.0);
+            call.perform();
+          } else {
+            id(strip).turn_off().perform();
+          }
+
+  - id: fx_all_on
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_global_fade_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip
+          effect: "Global Fade On"
+          brightness: 1.0
+          red: 1.0
+          green: 1.0
+          blue: 1.0
+      - wait_until:
+          lambda: 'return (millis() - id(fx_start_ms)) >= id(fx_duration_ms);'
+      - delay: 50ms
+      - light.turn_on:
+          id: strip
+          effect: "None"
+          brightness: !lambda "return id(fx_max_brightness).state / 100.0f;"
+          red: 1.0
+          green: 1.0
+          blue: 1.0
+
+  - id: fx_all_off
+    mode: restart
+    then:
+      - lambda: |-
+          id(fx_start_ms) = millis();
+          id(fx_duration_ms) = (int)(id(fx_global_fade_duration_s).state * 1000.0f);
+      - light.turn_on:
+          id: strip
+          effect: "Global Fade Off"
+          brightness: 1.0
+          red: 1.0
+          green: 1.0
+          blue: 1.0
+      - wait_until:
+          lambda: 'return (millis() - id(fx_start_ms)) >= id(fx_duration_ms);'
+      - delay: 50ms
+      - lambda: |-
+          if (id(fx_min_brightness).state > 0) {
+            auto call = id(strip).make_call();
+            call.set_effect("None");
+            call.set_brightness(id(fx_min_brightness).state / 100.0f);
+            call.set_rgb(1.0, 1.0, 1.0);
+            call.perform();
+          } else {
+            id(strip).turn_off().perform();
+          }
